@@ -28,11 +28,10 @@ func (r *repository) GetApartmentsByCity(ctx context.Context, city City, limit, 
 	if err != nil {
 		return nil, DatabaseError
 	}
-	var apartments []Apartment
+	apartments := make([]Apartment, 0, limit)
 	err = cursor.All(ctx, &apartments)
 	if err != nil {
 		return nil, DatabaseError
 	}
-
 	return apartments, nil
 }

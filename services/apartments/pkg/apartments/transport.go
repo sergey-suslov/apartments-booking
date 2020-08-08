@@ -17,11 +17,11 @@ func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 		kithttp.ServerErrorEncoder(encodeError),
 	}
 
-	getApartmentsHandelr := kithttp.NewServer(makeGetApartmentsEndpoint(s), decodeGetApartmentsRequest, encodeResponse, opts...)
+	getApartmentsHandler := kithttp.NewServer(makeGetApartmentsEndpoint(s), decodeGetApartmentsRequest, encodeResponse, opts...)
 
 	r := mux.NewRouter()
 
-	r.Handle("/apartments", getApartmentsHandelr).Methods("GET")
+	r.Handle("/apartments", getApartmentsHandler).Methods("GET")
 
 	return r
 }

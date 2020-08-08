@@ -23,11 +23,13 @@ import (
 )
 
 func main() {
-	fs := flag.NewFlagSet("addcli", flag.ExitOnError)
+	fs := flag.NewFlagSet("apartmentscli", flag.ExitOnError)
 	var (
-		port = fs.String("port", "50051", "Port of Apartments service")
-		help = fs.Bool("h", false, "Show help")
-		test = fs.Bool("test", false, "Show help")
+		port     = fs.String("port", "50051", "Port of Apartments service")
+		mongoURI = fs.String("mongo", "mongodb://user:password@localhost:27017/apartments", "MongoDB connection string mongodb://...")
+		help     = fs.Bool("h", false, "Show help")
+		test     = fs.Bool("test", false, "Show help")
+		logDebug = fs.Bool("debug", false, "Log debug info")
 	)
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
 	_ = fs.Parse(os.Args[1:])
@@ -36,13 +38,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	mc, closeConn := connectMongo()
+	mc, closeConn := connectMongo(*mongoURI)
 
 	if *test {
 		createTestApartments(mc.Database("apartments"))
 	}
 
-	logger, err := zap.NewProduction()
+	logConfig := zap.NewProductionConfig()
+	if *logDebug {
+		logConfig.Level.SetLevel(zap.DebugLevel)
+	}
+	logger, err := logConfig.Build()
 	if err != nil {
 		panic(err)
 	}
@@ -121,10 +127,10 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 	}
 }
 
-func connectMongo() (*mongo.Client, func()) {
+func connectMongo(uri string) (*mongo.Client, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://user:password@localhost:27017/apartments"))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
 		panic(err)
 	}
