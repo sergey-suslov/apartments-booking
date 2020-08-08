@@ -3,10 +3,12 @@ package apartments
 import (
 	"context"
 	"encoding/json"
+	"github.com/go-kit/kit/circuitbreaker"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport"
 	kithttp "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
+	"github.com/sony/gobreaker"
 
 	"net/http"
 )
@@ -17,7 +19,9 @@ func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 		kithttp.ServerErrorEncoder(encodeError),
 	}
 
-	getApartmentsHandler := kithttp.NewServer(makeGetApartmentsEndpoint(s), decodeGetApartmentsRequest, encodeResponse, opts...)
+	endpoint := makeGetApartmentsEndpoint(s)
+	endpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(endpoint)
+	getApartmentsHandler := kithttp.NewServer(endpoint, decodeGetApartmentsRequest, encodeResponse, opts...)
 
 	r := mux.NewRouter()
 
