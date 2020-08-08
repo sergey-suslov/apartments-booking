@@ -29,7 +29,7 @@ type service struct {
 	ar Repository
 }
 
-func NewService(ar Repository) *service {
+func NewService(ar Repository) Service {
 	return &service{ar: ar}
 }
 

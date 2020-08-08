@@ -7,20 +7,20 @@ import (
 )
 
 type loggingService struct {
-	logger zap.Logger
+	logger *zap.Logger
 	Service
 }
 
-func NewLoggingService(logger zap.Logger, service Service) *loggingService {
+func NewLoggingService(logger *zap.Logger, service Service) Service {
 	return &loggingService{logger: logger, Service: service}
 }
 
 func (s *loggingService) GetApartments(ctx context.Context, city City, limit, offset int) (a []Apartment, err error) {
 	defer func(begin time.Time) {
-		s.logger.With(
-			zap.Field{Key: "method", String: "GetApartments"},
-			zap.Field{Key: "took", Integer: time.Since(begin).Milliseconds()},
-			zap.Field{Key: "error", String: err.Error()})
+		s.logger.Debug("calling GetApartments",
+			zap.Duration("took", time.Since(begin)),
+			zap.Error(err),
+		)
 	}(time.Now())
 	return s.Service.GetApartments(ctx, city, limit, offset)
 }
