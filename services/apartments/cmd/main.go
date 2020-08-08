@@ -9,9 +9,11 @@ import (
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +27,7 @@ func main() {
 	var (
 		port = fs.String("port", "50051", "Port of Apartments service")
 		help = fs.Bool("h", false, "Show help")
+		test = fs.Bool("test", false, "Show help")
 	)
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
 	_ = fs.Parse(os.Args[1:])
@@ -34,6 +37,10 @@ func main() {
 	}
 
 	mc, closeConn := connectMongo()
+
+	if *test {
+		createTestApartments(mc.Database("apartments"))
+	}
 
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -117,7 +124,7 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 func connectMongo() (*mongo.Client, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://user:password@localhost:27017/tasks"))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://user:password@localhost:27017/apartments"))
 	if err != nil {
 		panic(err)
 	}
@@ -126,5 +133,18 @@ func connectMongo() (*mongo.Client, func()) {
 		if err = client.Disconnect(ctx); err != nil {
 			panic(err)
 		}
+	}
+}
+
+func createTestApartments(mc *mongo.Database) {
+	cities := []string{"Dublin", "Munich", "London"}
+	for i := 1; i < 5; i++ {
+		city := cities[rand.Intn(len(cities))]
+		_, _ = mc.Collection("apartments").InsertOne(context.Background(), bson.M{
+			"title":   fmt.Sprintf("Test apartment from %s %d", city, i+1),
+			"address": "Dublin, somewhere st. 25",
+			"owner":   "Mike",
+			"city":    city,
+		})
 	}
 }

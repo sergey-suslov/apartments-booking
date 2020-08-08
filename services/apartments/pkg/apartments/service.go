@@ -15,6 +15,7 @@ type Apartment struct {
 	Title   string             `json:"title"`
 	Address string             `json:"address"`
 	Owner   string             `json:"owner"`
+	City    string             `json:"city"`
 }
 
 type Service interface {
@@ -34,5 +35,5 @@ func NewService(ar Repository) Service {
 }
 
 func (s *service) GetApartments(ctx context.Context, city City, limit, offset int) ([]Apartment, error) {
-	panic("implement me")
+	return s.ar.GetApartmentsByCity(ctx, city, limit, offset)
 }
