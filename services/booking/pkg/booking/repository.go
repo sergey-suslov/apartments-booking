@@ -3,6 +3,7 @@ package booking
 import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"time"
@@ -36,4 +37,21 @@ func (r *repository) GetReservationsBetween(ctx context.Context, apartmentId str
 		return nil, DatabaseError
 	}
 	return reservations, nil
+}
+
+func (r *repository) MakeReservation(ctx context.Context, reservation *Reservation) (*Reservation, error) {
+	result, err := r.db.Collection(reservationCollectionName).InsertOne(
+		ctx,
+		bson.M{
+			"apartmentId": reservation.ApartmentId,
+			"userId":      reservation.UserId,
+			"start":       reservation.Start,
+			"end":         reservation.End,
+			"created":     reservation.Created},
+	)
+	if err != nil {
+		return nil, err
+	}
+	reservation.ID = result.InsertedID.(primitive.ObjectID)
+	return reservation, nil
 }
