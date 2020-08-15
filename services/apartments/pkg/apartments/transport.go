@@ -7,11 +7,16 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport"
 	kithttp "github.com/go-kit/kit/transport/http"
+	kitnats "github.com/go-kit/kit/transport/nats"
 	"github.com/gorilla/mux"
+	"github.com/nats-io/nats.go"
 	"github.com/sony/gobreaker"
 
 	"net/http"
 )
+
+const queueName = "apartments"
+const getApartmentByIdSubject = "apartments.getApartmentById"
 
 func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
@@ -56,4 +61,22 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
+}
+
+func MakeNatsHandler(s Service, nc *nats.Conn) {
+	apartmentByIdEndpoint := makeGetApartmentByIdEndpoint(s)
+	subscriber := kitnats.NewSubscriber(apartmentByIdEndpoint, decodeGetApartmentByIdRequest, kitnats.EncodeJSONResponse)
+	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func decodeGetApartmentByIdRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
+	var req getApartmentByIdRequest
+	err = json.Unmarshal(msg.Data, &req)
+	if err != nil {
+		return nil, err
+	}
+	return req, nil
 }

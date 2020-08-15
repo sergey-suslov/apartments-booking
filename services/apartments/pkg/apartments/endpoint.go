@@ -34,3 +34,23 @@ func makeGetApartmentsEndpoint(s Service) endpoint.Endpoint {
 		}, nil
 	}
 }
+
+type getApartmentByIdRequest struct {
+	ApartmentId string `json:"apartmentId"`
+}
+
+type getApartmentByIdResponse struct {
+	Apartment *Apartment `json:"apartment"`
+	Err       error      `json:"err,omitempty"`
+}
+
+func makeGetApartmentByIdEndpoint(s Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(getApartmentByIdRequest)
+		apartment, err := s.GetApartmentById(ctx, req.ApartmentId)
+		return getApartmentByIdResponse{
+			Apartment: apartment,
+			Err:       err,
+		}, nil
+	}
+}

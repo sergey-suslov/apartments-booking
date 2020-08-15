@@ -1,7 +1,7 @@
 package main
 
 import (
-	"apartments/pkg/apartments"
+	"booking/pkg/booking"
 	"context"
 	"flag"
 	"fmt"
@@ -10,11 +10,9 @@ import (
 	"github.com/nats-io/nats.go"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,11 +22,11 @@ import (
 )
 
 func main() {
-	fs := flag.NewFlagSet("apartmentscli", flag.ExitOnError)
+	fs := flag.NewFlagSet("bookingcli", flag.ExitOnError)
 	var (
-		port                 = fs.String("port", "50051", "Port of Apartments service")
-		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27017/apartments", "MongoDB connection string mongodb://...")
+		port                 = fs.String("port", "50052", "Port of Booking service")
 		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
+		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27018/booking", "MongoDB connection string mongodb://...")
 		help                 = fs.Bool("h", false, "Show help")
 		test                 = fs.Bool("test", false, "Show help")
 		logDebug             = fs.Bool("debug", false, "Log debug info")
@@ -44,7 +42,7 @@ func main() {
 	nc, closeNats := connectNats(*natsConnectionString)
 
 	if *test {
-		createTestApartments(mc.Database("apartments"))
+		// do some test thing
 	}
 
 	logConfig := zap.NewProductionConfig()
@@ -55,21 +53,22 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	repository := apartments.NewRepository(mc.Database("apartments"))
-	service := apartments.NewService(repository)
-	service = apartments.NewLoggingService(logger, service)
+	repository := booking.NewRepository(mc.Database("booking"))
+	apartmentsRepository := booking.NewApartmentsRepository(nc)
+	service := booking.NewService(repository, apartmentsRepository, logger)
+	service = booking.NewLoggingService(logger, service)
 
 	fieldKeys := []string{"method"}
-	service = apartments.NewInstrumentingService(
+	service = booking.NewInstrumentingService(
 		kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: "api",
-			Subsystem: "apartments_service",
+			Subsystem: "booking_service",
 			Name:      "request_count",
 			Help:      "Number of requests received.",
 		}, fieldKeys),
 		kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
 			Namespace: "api",
-			Subsystem: "apartments_service",
+			Subsystem: "booking_service",
 			Name:      "request_latency_microseconds",
 			Help:      "Total duration of requests in microseconds.",
 		}, fieldKeys),
@@ -80,19 +79,14 @@ func main() {
 		closeNats()
 	}()
 
-	// Make HTTP handlers
 	mux := http.NewServeMux()
 
 	httpLogger := kitlog.With(kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr)), "component", "http")
-	mux.Handle("/apartments", apartments.MakeHttpHandler(service, httpLogger))
+	mux.Handle("/reservations", booking.MakeHttpHandler(service, httpLogger))
 
 	http.Handle("/", accessControl(mux))
 	http.Handle("/metrics", promhttp.Handler())
 
-	// Make NATS handlers
-	apartments.MakeNatsHandler(service, nc)
-
-	// Catching errors and waiting for stop signal
 	errs := make(chan error, 2)
 	go func() {
 		logger.Info("listening", zap.String("port", *port))
@@ -148,19 +142,6 @@ func connectMongo(uri string) (*mongo.Client, func()) {
 		if err = client.Disconnect(ctx); err != nil {
 			panic(err)
 		}
-	}
-}
-
-func createTestApartments(mc *mongo.Database) {
-	cities := []string{"Dublin", "Munich", "London"}
-	for i := 1; i < 5; i++ {
-		city := cities[rand.Intn(len(cities))]
-		_, _ = mc.Collection("apartments").InsertOne(context.Background(), bson.M{
-			"title":   fmt.Sprintf("Test apartment from %s %d", city, i+1),
-			"address": "Dublin, somewhere st. 25",
-			"owner":   "Mike",
-			"city":    city,
-		})
 	}
 }
 
