@@ -19,13 +19,18 @@ func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 		kithttp.ServerErrorEncoder(encodeError),
 	}
 
-	endpoint := makeGetApartmentsEndpoint(s)
-	endpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(endpoint)
-	getReservationsHandler := kithttp.NewServer(endpoint, decodeGetApartmentsRequest, encodeResponse, opts...)
+	getApartmentsEndpoint := makeGetApartmentsEndpoint(s)
+	getApartmentsEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(getApartmentsEndpoint)
+	getReservationsHandler := kithttp.NewServer(getApartmentsEndpoint, decodeGetApartmentsRequest, encodeResponse, opts...)
+
+	bookApartmentEndpoint := makeBookApartmentEndpoint(s)
+	bookApartmentEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(bookApartmentEndpoint)
+	bookApartmentHandler := kithttp.NewServer(bookApartmentEndpoint, DefaultRequestDecoder(decodeBookApartmentRequest), encodeResponse, opts...)
 
 	r := mux.NewRouter()
 
 	r.Handle("/reservations", getReservationsHandler).Methods("GET")
+	r.Handle("/reservations", bookApartmentHandler).Methods("POST")
 
 	return r
 }
@@ -36,6 +41,14 @@ func decodeGetApartmentsRequest(_ context.Context, r *http.Request) (interface{}
 		return nil, err
 	}
 	return req, nil
+}
+
+func decodeBookApartmentRequest(r *http.Request) (UserClaimable, error) {
+	var req bookRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, err
+	}
+	return &req, nil
 }
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
@@ -50,10 +63,32 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch err {
+	case wrongIdFormat:
+		w.WriteHeader(http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),
 	})
+}
+
+type UserClaimable interface {
+	SetUserClaim(claim UserClaim)
+}
+
+func DefaultRequestDecoder(decoder func(r *http.Request) (UserClaimable, error)) func(_ context.Context, r *http.Request) (interface{}, error) {
+	return func(_ context.Context, r *http.Request) (interface{}, error) {
+		userClaim, err := GetUserClaimFromRequest(r)
+		if err != nil {
+			return nil, err
+		}
+
+		request, err := decoder(r)
+		if err != nil {
+			return nil, err
+		}
+		request.SetUserClaim(*userClaim)
+		return request, nil
+	}
 }

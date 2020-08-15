@@ -7,6 +7,7 @@ import (
 	"fmt"
 	kitlog "github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
+	"github.com/nats-io/nats.go"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,11 +24,12 @@ import (
 func main() {
 	fs := flag.NewFlagSet("bookingcli", flag.ExitOnError)
 	var (
-		port     = fs.String("port", "50052", "Port of Booking service")
-		mongoURI = fs.String("mongo", "mongodb://user:password@localhost:27017/booking", "MongoDB connection string mongodb://...")
-		help     = fs.Bool("h", false, "Show help")
-		test     = fs.Bool("test", false, "Show help")
-		logDebug = fs.Bool("debug", false, "Log debug info")
+		port                 = fs.String("port", "50052", "Port of Booking service")
+		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
+		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27018/booking", "MongoDB connection string mongodb://...")
+		help                 = fs.Bool("h", false, "Show help")
+		test                 = fs.Bool("test", false, "Show help")
+		logDebug             = fs.Bool("debug", false, "Log debug info")
 	)
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
 	_ = fs.Parse(os.Args[1:])
@@ -37,6 +39,7 @@ func main() {
 	}
 
 	mc, closeConn := connectMongo(*mongoURI)
+	nc, closeNats := connectNats(*natsConnectionString)
 
 	if *test {
 		// do some test thing
@@ -51,7 +54,8 @@ func main() {
 		panic(err)
 	}
 	repository := booking.NewRepository(mc.Database("booking"))
-	service := booking.NewService(repository)
+	apartmentsRepository := booking.NewApartmentsRepository(nc)
+	service := booking.NewService(repository, apartmentsRepository, logger)
 	service = booking.NewLoggingService(logger, service)
 
 	fieldKeys := []string{"method"}
@@ -72,6 +76,7 @@ func main() {
 	defer func() {
 		_ = logger.Sync()
 		closeConn()
+		closeNats()
 	}()
 
 	mux := http.NewServeMux()
@@ -138,4 +143,12 @@ func connectMongo(uri string) (*mongo.Client, func()) {
 			panic(err)
 		}
 	}
+}
+
+func connectNats(connString string) (*nats.Conn, func()) {
+	nc, err := nats.Connect(connString)
+	if err != nil {
+		panic(err)
+	}
+	return nc, nc.Close
 }

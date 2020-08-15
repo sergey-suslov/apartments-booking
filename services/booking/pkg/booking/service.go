@@ -57,10 +57,10 @@ type ApartmentsRepository interface {
 type service struct {
 	r      Repository
 	ar     ApartmentsRepository
-	logger zap.Logger
+	logger *zap.Logger
 }
 
-func NewService(r Repository, ar ApartmentsRepository, logger zap.Logger) Service {
+func NewService(r Repository, ar ApartmentsRepository, logger *zap.Logger) Service {
 	return &service{r: r, ar: ar, logger: logger}
 }
 
