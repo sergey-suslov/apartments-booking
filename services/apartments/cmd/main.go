@@ -7,6 +7,7 @@ import (
 	"fmt"
 	kitlog "github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
+	"github.com/nats-io/nats.go"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.mongodb.org/mongo-driver/bson"
@@ -25,11 +26,12 @@ import (
 func main() {
 	fs := flag.NewFlagSet("apartmentscli", flag.ExitOnError)
 	var (
-		port     = fs.String("port", "50051", "Port of Apartments service")
-		mongoURI = fs.String("mongo", "mongodb://user:password@localhost:27017/apartments", "MongoDB connection string mongodb://...")
-		help     = fs.Bool("h", false, "Show help")
-		test     = fs.Bool("test", false, "Show help")
-		logDebug = fs.Bool("debug", false, "Log debug info")
+		port                 = fs.String("port", "50051", "Port of Apartments service")
+		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27017/apartments", "MongoDB connection string mongodb://...")
+		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
+		help                 = fs.Bool("h", false, "Show help")
+		test                 = fs.Bool("test", false, "Show help")
+		logDebug             = fs.Bool("debug", false, "Log debug info")
 	)
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
 	_ = fs.Parse(os.Args[1:])
@@ -39,6 +41,7 @@ func main() {
 	}
 
 	mc, closeConn := connectMongo(*mongoURI)
+	nc, closeNats := connectNats(*natsConnectionString)
 
 	if *test {
 		createTestApartments(mc.Database("apartments"))
@@ -74,8 +77,10 @@ func main() {
 	defer func() {
 		_ = logger.Sync()
 		closeConn()
+		closeNats()
 	}()
 
+	// Make HTTP handlers
 	mux := http.NewServeMux()
 
 	httpLogger := kitlog.With(kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr)), "component", "http")
@@ -84,6 +89,10 @@ func main() {
 	http.Handle("/", accessControl(mux))
 	http.Handle("/metrics", promhttp.Handler())
 
+	// Make NATS handlers
+	apartments.MakeNatsHandler(service, nc)
+
+	// Catching errors and waiting for stop signal
 	errs := make(chan error, 2)
 	go func() {
 		logger.Info("listening", zap.String("port", *port))
@@ -153,4 +162,12 @@ func createTestApartments(mc *mongo.Database) {
 			"city":    city,
 		})
 	}
+}
+
+func connectNats(connString string) (*nats.Conn, func()) {
+	nc, err := nats.Connect(connString)
+	if err != nil {
+		panic(err)
+	}
+	return nc, nc.Close
 }

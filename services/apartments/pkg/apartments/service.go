@@ -20,10 +20,12 @@ type Apartment struct {
 
 type Service interface {
 	GetApartments(ctx context.Context, city City, limit, offset int) ([]Apartment, error)
+	GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error)
 }
 
 type Repository interface {
 	GetApartmentsByCity(ctx context.Context, city City, limit, offset int) ([]Apartment, error)
+	GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error)
 }
 
 type service struct {
@@ -36,4 +38,8 @@ func NewService(ar Repository) Service {
 
 func (s *service) GetApartments(ctx context.Context, city City, limit, offset int) ([]Apartment, error) {
 	return s.ar.GetApartmentsByCity(ctx, city, limit, offset)
+}
+
+func (s *service) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
+	return s.ar.GetApartmentById(ctx, apartmentId)
 }

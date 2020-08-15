@@ -24,3 +24,12 @@ func (i *instrumentingService) GetApartments(ctx context.Context, city City, lim
 
 	return i.Service.GetApartments(ctx, city, limit, offset)
 }
+
+func (i *instrumentingService) GetApartmentById(ctx context.Context, apartmentId string) (a *Apartment, err error) {
+	defer func(begin time.Time) {
+		i.requestCount.With("method", "GetApartmentById").Add(1)
+		i.requestLatency.With("method", "GetApartmentById").Observe(time.Since(begin).Seconds())
+	}(time.Now())
+
+	return i.Service.GetApartmentById(ctx, apartmentId)
+}

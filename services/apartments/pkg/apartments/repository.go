@@ -3,6 +3,7 @@ package apartments
 import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -34,4 +35,19 @@ func (r *repository) GetApartmentsByCity(ctx context.Context, city City, limit, 
 		return nil, DatabaseError
 	}
 	return apartments, nil
+}
+
+func (r *repository) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
+	objectID, err := primitive.ObjectIDFromHex(apartmentId)
+	if err != nil {
+		return nil, err
+	}
+
+	result := r.db.Collection(apartmentCollectionName).FindOne(ctx, bson.D{{"_id", objectID}})
+	var apartment Apartment
+	err = result.Decode(&apartment)
+	if err != nil {
+		return nil, err
+	}
+	return &apartment, nil
 }
