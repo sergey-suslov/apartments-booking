@@ -36,7 +36,7 @@ type getApartmentByIdResponse struct {
 }
 
 func (a *apartmentsRepository) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
-	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, encodeWithContext, decodeGetApartmentById)
+	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, EncodeWithZipkinContext, decodeGetApartmentById)
 	res, err := publisher.Endpoint()(ctx, getApartmentByIdRequest{ApartmentId: apartmentId})
 	if err != nil {
 		return nil, err
@@ -60,33 +60,19 @@ func decodeGetApartmentById(_ context.Context, msg *nats.Msg) (response interfac
 	return res, nil
 }
 
-func encodeWithContext(ctx context.Context, msg *nats.Msg, request interface{}) error {
+func EncodeWithZipkinContext(ctx context.Context, msg *nats.Msg, request interface{}) error {
 	value := ctx.Value("spanContext")
-	var spanCtx model.SpanContext
-	if value != nil {
-		spanCtx = value.(model.SpanContext)
-	}
-	var b []byte
-	if value != nil {
-		payload, err := json.Marshal(&natsPayload{
-			SpanContext: &spanCtx,
-			Data:        request,
-		})
-		if err != nil {
-			return err
-		}
-		b = payload
-	} else {
-		payload, err := json.Marshal(&natsPayload{
+
+	if value == nil {
+		return natstransport.EncodeJSONRequest(ctx, msg, natsPayload{
 			Data: request,
 		})
-		if err != nil {
-			return err
-		}
-		b = payload
 	}
 
-	msg.Data = b
-
-	return nil
+	var spanCtx model.SpanContext
+	spanCtx = value.(model.SpanContext)
+	return natstransport.EncodeJSONRequest(ctx, msg, natsPayload{
+		SpanContext: &spanCtx,
+		Data:        request,
+	})
 }
