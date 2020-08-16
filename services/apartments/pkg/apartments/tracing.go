@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const zipkinTracerKey = "zipkinTracerKey"
+
 type tracingService struct {
 	zipkinTracer *zipkin.Tracer
 	s            Service
@@ -22,7 +24,7 @@ func (t *tracingService) GetApartments(ctx context.Context, city City, limit, of
 }
 
 func (t *tracingService) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
-	span, spanCtx := t.StartSpanFromContext(ctx, "get apartment by id")
+	span, spanCtx := t.startSpanFromContext(ctx, "get apartment by id")
 	span.Tag("method", "GetApartmentById")
 	span.Annotate(time.Now(), "start")
 
@@ -33,12 +35,23 @@ func (t *tracingService) GetApartmentById(ctx context.Context, apartmentId strin
 	return apartment, err
 }
 
-func (t *tracingService) StartSpanFromContext(ctx context.Context, name string) (zipkin.Span, context.Context) {
-	rawSpan := ctx.Value(SpanCtx)
+func (t *tracingService) startSpanFromContext(ctx context.Context, name string) (zipkin.Span, context.Context) {
+	rawSpan := ctx.Value(SpanCtxKey)
 	var spanCtx model.SpanContext
 	if rawSpan != nil {
 		spanCtx = rawSpan.(model.SpanContext)
 	}
 	span, newCtx := t.zipkinTracer.StartSpanFromContext(ctx, name, zipkin.Parent(spanCtx))
-	return span, newCtx
+	return span, context.WithValue(newCtx, zipkinTracerKey, t.zipkinTracer)
+}
+
+func StartSpanFromContext(ctx context.Context, name string) (zipkin.Span, context.Context) {
+	value := ctx.Value(zipkinTracerKey)
+	if value == nil {
+		return nil, ctx
+	}
+
+	tracer := value.(*zipkin.Tracer)
+	span, spanCtx := tracer.StartSpanFromContext(ctx, name)
+	return span, spanCtx
 }

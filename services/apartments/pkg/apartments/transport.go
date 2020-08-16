@@ -19,7 +19,7 @@ import (
 const queueName = "apartments"
 const getApartmentByIdSubject = "apartments.getApartmentById"
 
-var SpanCtx = struct{}{}
+const SpanCtxKey = "SpanCtxKey"
 
 func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
@@ -87,7 +87,7 @@ func decodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
 		return ctx
 	}
 	if payload.SpanContext.ID != 0 {
-		return context.WithValue(ctx, SpanCtx, payload.SpanContext)
+		return context.WithValue(ctx, SpanCtxKey, payload.SpanContext)
 	}
 	return ctx
 }

@@ -79,11 +79,6 @@ func main() {
 
 	repository := apartments.NewRepository(mc.Database("apartments"))
 	service := apartments.NewService(repository)
-	if *zipkinURL != "" {
-		service = apartments.NewTracingService(zipkinTracer, service)
-	}
-	service = apartments.NewLoggingService(logger, service)
-
 	fieldKeys := []string{"method"}
 	service = apartments.NewInstrumentingService(
 		kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
@@ -104,6 +99,10 @@ func main() {
 		closeConn()
 		closeNats()
 	}()
+	service = apartments.NewLoggingService(logger, service)
+	if *zipkinURL != "" {
+		service = apartments.NewTracingService(zipkinTracer, service)
+	}
 
 	// Make HTTP handlers
 	mux := http.NewServeMux()
