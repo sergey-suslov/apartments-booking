@@ -8,6 +8,8 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	"github.com/nats-io/nats.go"
+	"github.com/openzipkin/zipkin-go"
+	httpreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -27,8 +29,9 @@ func main() {
 		port                 = fs.String("port", "50052", "Port of Booking service")
 		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
 		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27018/booking", "MongoDB connection string mongodb://...")
+		zipkinURL            = fs.String("zipkin-url", "", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
 		help                 = fs.Bool("h", false, "Show help")
-		test                 = fs.Bool("test", false, "Show help")
+		test                 = fs.Bool("test", false, "Run test setup")
 		logDebug             = fs.Bool("debug", false, "Log debug info")
 	)
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
@@ -53,9 +56,32 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	var zipkinTracer *zipkin.Tracer
+	{
+		if *zipkinURL != "" {
+			var (
+				err         error
+				hostPort    = "localhost:" + *port
+				serviceName = "booking"
+				reporter    = httpreporter.NewReporter(*zipkinURL)
+			)
+			zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
+			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
+			if err != nil {
+				logger.Error("err", zap.Error(err))
+				os.Exit(1)
+			}
+		}
+	}
+
 	repository := booking.NewRepository(mc.Database("booking"))
 	apartmentsRepository := booking.NewApartmentsRepository(nc)
+
 	service := booking.NewService(repository, apartmentsRepository, logger)
+	if *zipkinURL != "" {
+		service = booking.NewTracingService(zipkinTracer, service)
+	}
 	service = booking.NewLoggingService(logger, service)
 
 	fieldKeys := []string{"method"}

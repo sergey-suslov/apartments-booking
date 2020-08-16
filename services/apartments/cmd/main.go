@@ -8,6 +8,8 @@ import (
 	kitlog "github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	"github.com/nats-io/nats.go"
+	"github.com/openzipkin/zipkin-go"
+	httpreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.mongodb.org/mongo-driver/bson"
@@ -29,6 +31,7 @@ func main() {
 		port                 = fs.String("port", "50051", "Port of Apartments service")
 		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27017/apartments", "MongoDB connection string mongodb://...")
 		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
+		zipkinURL            = fs.String("zipkin-url", "", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
 		help                 = fs.Bool("h", false, "Show help")
 		test                 = fs.Bool("test", false, "Show help")
 		logDebug             = fs.Bool("debug", false, "Log debug info")
@@ -55,10 +58,27 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	var zipkinTracer *zipkin.Tracer
+	{
+		if *zipkinURL != "" {
+			var (
+				err         error
+				hostPort    = "localhost:" + *port
+				serviceName = "apartments"
+				reporter    = httpreporter.NewReporter(*zipkinURL)
+			)
+			zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
+			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
+			if err != nil {
+				logger.Error("err", zap.Error(err))
+				os.Exit(1)
+			}
+		}
+	}
+
 	repository := apartments.NewRepository(mc.Database("apartments"))
 	service := apartments.NewService(repository)
-	service = apartments.NewLoggingService(logger, service)
-
 	fieldKeys := []string{"method"}
 	service = apartments.NewInstrumentingService(
 		kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
@@ -79,6 +99,10 @@ func main() {
 		closeConn()
 		closeNats()
 	}()
+	service = apartments.NewLoggingService(logger, service)
+	if *zipkinURL != "" {
+		service = apartments.NewTracingService(zipkinTracer, service)
+	}
 
 	// Make HTTP handlers
 	mux := http.NewServeMux()

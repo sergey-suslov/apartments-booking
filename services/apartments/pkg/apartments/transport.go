@@ -9,6 +9,7 @@ import (
 	kithttp "github.com/go-kit/kit/transport/http"
 	kitnats "github.com/go-kit/kit/transport/nats"
 	"github.com/gorilla/mux"
+	"github.com/mitchellh/mapstructure"
 	"github.com/nats-io/nats.go"
 	"github.com/sony/gobreaker"
 
@@ -17,6 +18,8 @@ import (
 
 const queueName = "apartments"
 const getApartmentByIdSubject = "apartments.getApartmentById"
+
+const SpanCtxKey = "SpanCtxKey"
 
 func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
@@ -65,18 +68,40 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 
 func MakeNatsHandler(s Service, nc *nats.Conn) {
 	apartmentByIdEndpoint := makeGetApartmentByIdEndpoint(s)
-	subscriber := kitnats.NewSubscriber(apartmentByIdEndpoint, decodeGetApartmentByIdRequest, kitnats.EncodeJSONResponse)
+	subscriber := kitnats.NewSubscriber(
+		apartmentByIdEndpoint,
+		decodeGetApartmentByIdRequest,
+		kitnats.EncodeJSONResponse,
+		kitnats.SubscriberBefore(decodeSpanContext),
+	)
 	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
 	if err != nil {
 		panic(err)
 	}
 }
 
+func decodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
+	var payload natsPayload
+	err := json.Unmarshal(msg.Data, &payload)
+	if err != nil {
+		return ctx
+	}
+	if payload.SpanContext.ID != 0 {
+		return context.WithValue(ctx, SpanCtxKey, payload.SpanContext)
+	}
+	return ctx
+}
+
 func decodeGetApartmentByIdRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
-	var req getApartmentByIdRequest
+	var req natsPayload
 	err = json.Unmarshal(msg.Data, &req)
 	if err != nil {
 		return nil, err
 	}
-	return req, nil
+	var getApartmentByIdRequest getApartmentByIdRequest
+	err = mapstructure.Decode(req.Data, &getApartmentByIdRequest)
+	if err != nil {
+		return nil, err
+	}
+	return getApartmentByIdRequest, nil
 }

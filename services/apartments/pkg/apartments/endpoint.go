@@ -3,6 +3,7 @@ package apartments
 import (
 	"context"
 	"github.com/go-kit/kit/endpoint"
+	"github.com/openzipkin/zipkin-go/model"
 )
 
 type Errorer interface {
@@ -33,6 +34,11 @@ func makeGetApartmentsEndpoint(s Service) endpoint.Endpoint {
 			Err:        err,
 		}, nil
 	}
+}
+
+type natsPayload struct {
+	SpanContext model.SpanContext `json:"spanContext"`
+	Data        interface{}       `json:"data"`
 }
 
 type getApartmentByIdRequest struct {
