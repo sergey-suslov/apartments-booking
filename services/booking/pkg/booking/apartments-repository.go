@@ -22,8 +22,8 @@ func NewApartmentsRepository(nc *nats.Conn) *apartmentsRepository {
 }
 
 type natsPayload struct {
-	SpanContext model.SpanContext `json:"spanContext"`
-	Data        interface{}       `json:"data"`
+	SpanContext *model.SpanContext `json:"spanContext,omitempty"`
+	Data        interface{}        `json:"data"`
 }
 
 type getApartmentByIdRequest struct {
@@ -66,12 +66,24 @@ func encodeWithContext(ctx context.Context, msg *nats.Msg, request interface{}) 
 	if value != nil {
 		spanCtx = value.(model.SpanContext)
 	}
-	b, err := json.Marshal(&natsPayload{
-		SpanContext: spanCtx,
-		Data:        request,
-	})
-	if err != nil {
-		return err
+	var b []byte
+	if value != nil {
+		payload, err := json.Marshal(&natsPayload{
+			SpanContext: &spanCtx,
+			Data:        request,
+		})
+		if err != nil {
+			return err
+		}
+		b = payload
+	} else {
+		payload, err := json.Marshal(&natsPayload{
+			Data: request,
+		})
+		if err != nil {
+			return err
+		}
+		b = payload
 	}
 
 	msg.Data = b
