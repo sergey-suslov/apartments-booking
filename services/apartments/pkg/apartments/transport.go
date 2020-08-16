@@ -9,7 +9,6 @@ import (
 	kithttp "github.com/go-kit/kit/transport/http"
 	kitnats "github.com/go-kit/kit/transport/nats"
 	"github.com/gorilla/mux"
-	"github.com/mitchellh/mapstructure"
 	"github.com/nats-io/nats.go"
 	"github.com/sony/gobreaker"
 
@@ -72,7 +71,9 @@ func MakeNatsHandler(s Service, nc *nats.Conn) {
 		apartmentByIdEndpoint,
 		decodeGetApartmentByIdRequest,
 		kitnats.EncodeJSONResponse,
-		kitnats.SubscriberBefore(decodeSpanContext),
+
+		// turn on zipkin context parsing
+		kitnats.SubscriberBefore(DecodeSpanContext),
 	)
 	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
 	if err != nil {
@@ -80,12 +81,17 @@ func MakeNatsHandler(s Service, nc *nats.Conn) {
 	}
 }
 
-func decodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
+// DecodeSpanContext parse zipkin context from NATS message. Use as NewSubscriber option, for ex. nats.SubscriberBefore(DecodeSpanContext)
+func DecodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
 	var payload natsPayload
 	err := json.Unmarshal(msg.Data, &payload)
 	if err != nil {
 		return ctx
 	}
+
+	marshaled, _ := json.Marshal(payload.Data)
+	msg.Data = marshaled
+
 	if payload.SpanContext.ID != 0 {
 		return context.WithValue(ctx, SpanCtxKey, payload.SpanContext)
 	}
@@ -93,15 +99,11 @@ func decodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
 }
 
 func decodeGetApartmentByIdRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
-	var req natsPayload
-	err = json.Unmarshal(msg.Data, &req)
-	if err != nil {
-		return nil, err
-	}
 	var getApartmentByIdRequest getApartmentByIdRequest
-	err = mapstructure.Decode(req.Data, &getApartmentByIdRequest)
+	err = json.Unmarshal(msg.Data, &getApartmentByIdRequest)
 	if err != nil {
 		return nil, err
 	}
+
 	return getApartmentByIdRequest, nil
 }
