@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/openzipkin/zipkin-go/model"
-	"log"
 )
 
 type Errorer interface {
@@ -53,8 +52,6 @@ type getApartmentByIdResponse struct {
 
 func makeGetApartmentByIdEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		value := ctx.Value(SpanCtx)
-		log.Println(value)
 		req := request.(getApartmentByIdRequest)
 		apartment, err := s.GetApartmentById(ctx, req.ApartmentId)
 		return getApartmentByIdResponse{
