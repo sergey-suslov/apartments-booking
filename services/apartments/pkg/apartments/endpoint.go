@@ -37,8 +37,8 @@ func makeGetApartmentsEndpoint(s Service) endpoint.Endpoint {
 }
 
 type natsPayload struct {
-	SpanContext model.SpanContext `json:"spanContext,omitempty"`
-	Data        interface{}       `json:"data"`
+	SpanContext model.SpanContext `json:"sc,omitempty"`
+	Data        []byte            `json:"data"`
 }
 
 type getApartmentByIdRequest struct {

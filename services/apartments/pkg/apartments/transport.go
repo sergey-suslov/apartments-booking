@@ -89,8 +89,7 @@ func DecodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
 		return ctx
 	}
 
-	marshaled, _ := json.Marshal(payload.Data)
-	msg.Data = marshaled
+	msg.Data = payload.Data
 
 	if !payload.SpanContext.TraceID.Empty() {
 		return context.WithValue(ctx, SpanCtxKey, payload.SpanContext)
