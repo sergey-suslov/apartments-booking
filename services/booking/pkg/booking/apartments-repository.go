@@ -1,12 +1,13 @@
 package booking
 
 import (
+	nats_tracing "booking/pkg/nats-tracing"
 	"context"
 	"encoding/json"
 	"errors"
 	natstransport "github.com/go-kit/kit/transport/nats"
 	"github.com/nats-io/nats.go"
-	"github.com/openzipkin/zipkin-go/model"
+	"github.com/openzipkin/zipkin-go"
 )
 
 const getApartmentByIdSubject = "apartments.getApartmentById"
@@ -14,16 +15,12 @@ const getApartmentByIdSubject = "apartments.getApartmentById"
 var coldNotGetResponseFromApartment = errors.New("could not get response from the apartment service, wrong response format")
 
 type apartmentsRepository struct {
-	nc *nats.Conn
+	nc     *nats.Conn
+	tracer *zipkin.Tracer
 }
 
-func NewApartmentsRepository(nc *nats.Conn) *apartmentsRepository {
-	return &apartmentsRepository{nc: nc}
-}
-
-type natsPayload struct {
-	SpanContext *model.SpanContext `json:"spanContext,omitempty"`
-	Data        interface{}        `json:"data"`
+func NewApartmentsRepository(nc *nats.Conn, tracer *zipkin.Tracer) *apartmentsRepository {
+	return &apartmentsRepository{nc: nc, tracer: tracer}
 }
 
 type getApartmentByIdRequest struct {
@@ -36,7 +33,7 @@ type getApartmentByIdResponse struct {
 }
 
 func (a *apartmentsRepository) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
-	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, EncodeWithZipkinContext, decodeGetApartmentById)
+	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, natstransport.EncodeJSONRequest, decodeGetApartmentById, nats_tracing.NATSPublisherTrace(a.tracer))
 	res, err := publisher.Endpoint()(ctx, getApartmentByIdRequest{ApartmentId: apartmentId})
 	if err != nil {
 		return nil, err
@@ -58,21 +55,4 @@ func decodeGetApartmentById(_ context.Context, msg *nats.Msg) (response interfac
 		return nil, err
 	}
 	return res, nil
-}
-
-func EncodeWithZipkinContext(ctx context.Context, msg *nats.Msg, request interface{}) error {
-	value := ctx.Value("spanContext")
-
-	if value == nil {
-		return natstransport.EncodeJSONRequest(ctx, msg, natsPayload{
-			Data: request,
-		})
-	}
-
-	var spanCtx model.SpanContext
-	spanCtx = value.(model.SpanContext)
-	return natstransport.EncodeJSONRequest(ctx, msg, natsPayload{
-		SpanContext: &spanCtx,
-		Data:        request,
-	})
 }

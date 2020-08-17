@@ -29,7 +29,7 @@ func main() {
 		port                 = fs.String("port", "50052", "Port of Booking service")
 		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
 		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27018/booking", "MongoDB connection string mongodb://...")
-		zipkinURL            = fs.String("zipkin-url", "", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
+		zipkinURL            = fs.String("zipkin-url", "http://localhost:9411/api/v2/spans", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
 		help                 = fs.Bool("h", false, "Show help")
 		test                 = fs.Bool("test", false, "Run test setup")
 		logDebug             = fs.Bool("debug", false, "Log debug info")
@@ -76,12 +76,9 @@ func main() {
 	}
 
 	repository := booking.NewRepository(mc.Database("booking"))
-	apartmentsRepository := booking.NewApartmentsRepository(nc)
+	apartmentsRepository := booking.NewApartmentsRepository(nc, zipkinTracer)
 
 	service := booking.NewService(repository, apartmentsRepository, logger)
-	if *zipkinURL != "" {
-		service = booking.NewTracingService(zipkinTracer, service)
-	}
 	service = booking.NewLoggingService(logger, service)
 
 	fieldKeys := []string{"method"}
