@@ -1,6 +1,7 @@
 package apartments
 
 import (
+	nats_tracing "apartments/pkg/nats-tracing"
 	"context"
 	"encoding/json"
 	"github.com/go-kit/kit/circuitbreaker"
@@ -10,6 +11,7 @@ import (
 	kitnats "github.com/go-kit/kit/transport/nats"
 	"github.com/gorilla/mux"
 	"github.com/nats-io/nats.go"
+	"github.com/openzipkin/zipkin-go"
 	"github.com/sony/gobreaker"
 
 	"net/http"
@@ -17,8 +19,6 @@ import (
 
 const queueName = "apartments"
 const getApartmentByIdSubject = "apartments.getApartmentById"
-
-const SpanCtxKey = "SpanCtxKey"
 
 func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
@@ -65,7 +65,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	})
 }
 
-func MakeNatsHandler(s Service, nc *nats.Conn) {
+func MakeNatsHandler(s Service, nc *nats.Conn, tracer *zipkin.Tracer) {
 	apartmentByIdEndpoint := makeGetApartmentByIdEndpoint(s)
 	subscriber := kitnats.NewSubscriber(
 		apartmentByIdEndpoint,
@@ -73,28 +73,12 @@ func MakeNatsHandler(s Service, nc *nats.Conn) {
 		kitnats.EncodeJSONResponse,
 
 		// turn on zipkin context parsing
-		kitnats.SubscriberBefore(DecodeSpanContext),
+		nats_tracing.NATSSubscriberTrace(tracer, nats_tracing.SetName("get apartments by id")),
 	)
 	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
 	if err != nil {
 		panic(err)
 	}
-}
-
-// DecodeSpanContext parse zipkin context from NATS message. Use as NewSubscriber option, for ex. nats.SubscriberBefore(DecodeSpanContext)
-func DecodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
-	var payload natsPayload
-	err := json.Unmarshal(msg.Data, &payload)
-	if err != nil {
-		return ctx
-	}
-
-	msg.Data = payload.Data
-
-	if !payload.SpanContext.TraceID.Empty() {
-		return context.WithValue(ctx, SpanCtxKey, payload.SpanContext)
-	}
-	return ctx
 }
 
 func decodeGetApartmentByIdRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {

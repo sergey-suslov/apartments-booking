@@ -31,7 +31,7 @@ func main() {
 		port                 = fs.String("port", "50051", "Port of Apartments service")
 		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27017/apartments", "MongoDB connection string mongodb://...")
 		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
-		zipkinURL            = fs.String("zipkin-url", "", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
+		zipkinURL            = fs.String("zipkin-url", "http://localhost:9411/api/v2/spans", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
 		help                 = fs.Bool("h", false, "Show help")
 		test                 = fs.Bool("test", false, "Show help")
 		logDebug             = fs.Bool("debug", false, "Log debug info")
@@ -69,7 +69,7 @@ func main() {
 				reporter    = httpreporter.NewReporter(*zipkinURL)
 			)
 			zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
-			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
+			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP), zipkin.WithSharedSpans(false))
 			if err != nil {
 				logger.Error("err", zap.Error(err))
 				os.Exit(1)
@@ -100,9 +100,6 @@ func main() {
 		closeNats()
 	}()
 	service = apartments.NewLoggingService(logger, service)
-	if *zipkinURL != "" {
-		service = apartments.NewTracingService(zipkinTracer, service)
-	}
 
 	// Make HTTP handlers
 	mux := http.NewServeMux()
@@ -114,7 +111,7 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
 	// Make NATS handlers
-	apartments.MakeNatsHandler(service, nc)
+	apartments.MakeNatsHandler(service, nc, zipkinTracer)
 
 	// Catching errors and waiting for stop signal
 	errs := make(chan error, 2)
