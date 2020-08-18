@@ -72,6 +72,7 @@ func NATSPublisherTrace(tracer *zipkin.Tracer, options ...TracerOption) kitnats.
 		// TODO trace errors somehow
 		if span := zipkin.SpanFromContext(ctx); span != nil {
 			span.Finish()
+			span.Flush()
 		}
 
 		return ctx
@@ -90,7 +91,7 @@ type natsMessageWithContext struct {
 	Data interface{}       `json:"data"`
 }
 
-// InjectGRPC will inject a span.Context into NATS message.
+// InjectNATS will inject a span.Context into NATS message.
 func InjectNATS(msg *nats.Msg) propagation.Injector {
 	return func(sc model.SpanContext) error {
 		if (model.SpanContext{}) == sc {
@@ -110,5 +111,11 @@ func InjectNATS(msg *nats.Msg) propagation.Injector {
 		}
 
 		return nil
+	}
+}
+
+func SetName(name string) TracerOption {
+	return func(o *tracerOptions) {
+		o.name = name
 	}
 }

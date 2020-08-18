@@ -33,7 +33,7 @@ type getApartmentByIdResponse struct {
 }
 
 func (a *apartmentsRepository) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
-	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, natstransport.EncodeJSONRequest, decodeGetApartmentById, nats_tracing.NATSPublisherTrace(a.tracer))
+	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, natstransport.EncodeJSONRequest, decodeGetApartmentById, nats_tracing.NATSPublisherTrace(a.tracer, nats_tracing.SetName("book an apartment")))
 	res, err := publisher.Endpoint()(ctx, getApartmentByIdRequest{ApartmentId: apartmentId})
 	if err != nil {
 		return nil, err
