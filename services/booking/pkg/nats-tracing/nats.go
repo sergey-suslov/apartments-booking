@@ -98,17 +98,18 @@ func InjectNATS(msg *nats.Msg) propagation.Injector {
 			return ErrEmptyContext
 		}
 
-		if !sc.TraceID.Empty() && sc.ID > 0 {
-			messageWithContext := natsMessageWithContext{
-				Sc:   sc,
-				Data: msg.Data,
-			}
-			marshalledMessage, err := json.Marshal(&messageWithContext)
-			if err != nil {
-				return err
-			}
-			msg.Data = marshalledMessage
+		if sc.TraceID.Empty() || sc.ID == 0 {
+			return nil
 		}
+		messageWithContext := natsMessageWithContext{
+			Sc:   sc,
+			Data: msg.Data,
+		}
+		marshalledMessage, err := json.Marshal(&messageWithContext)
+		if err != nil {
+			return err
+		}
+		msg.Data = marshalledMessage
 
 		return nil
 	}
