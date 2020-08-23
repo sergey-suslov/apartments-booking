@@ -2,8 +2,9 @@ package apartments
 
 import (
 	"context"
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type loggingService struct {
@@ -25,14 +26,14 @@ func (s *loggingService) GetApartments(ctx context.Context, city City, limit, of
 	return s.Service.GetApartments(ctx, city, limit, offset)
 }
 
-func (s *loggingService) GetApartmentById(ctx context.Context, apartmentId string) (a *Apartment, err error) {
+func (s *loggingService) GetApartmentByID(ctx context.Context, apartmentID string) (a *Apartment, err error) {
 	defer func(begin time.Time) {
-		s.logger.Debug("calling GetApartmentById",
+		s.logger.Debug("calling GetApartmentByID",
 			zap.Duration("took", time.Since(begin)),
-			zap.String("requested apartmentId", apartmentId),
+			zap.String("requested apartmentID", apartmentID),
 			zap.Bool("is apartment found", a != nil),
 			zap.Error(err),
 		)
 	}(time.Now())
-	return s.Service.GetApartmentById(ctx, apartmentId)
+	return s.Service.GetApartmentByID(ctx, apartmentID)
 }

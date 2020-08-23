@@ -2,8 +2,8 @@ package apartments
 
 import (
 	"context"
+
 	"github.com/go-kit/kit/endpoint"
-	"github.com/openzipkin/zipkin-go/model"
 )
 
 type Errorer interface {
@@ -36,25 +36,20 @@ func makeGetApartmentsEndpoint(s Service) endpoint.Endpoint {
 	}
 }
 
-type natsPayload struct {
-	SpanContext model.SpanContext `json:"sc,omitempty"`
-	Data        []byte            `json:"data"`
+type getApartmentByIDRequest struct {
+	ApartmentID string `json:"apartmentId"`
 }
 
-type getApartmentByIdRequest struct {
-	ApartmentId string `json:"apartmentId"`
-}
-
-type getApartmentByIdResponse struct {
+type getApartmentByIDResponse struct {
 	Apartment *Apartment `json:"apartment"`
 	Err       error      `json:"err,omitempty"`
 }
 
-func makeGetApartmentByIdEndpoint(s Service) endpoint.Endpoint {
+func makeGetApartmentByIDEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(getApartmentByIdRequest)
-		apartment, err := s.GetApartmentById(ctx, req.ApartmentId)
-		return getApartmentByIdResponse{
+		req := request.(getApartmentByIDRequest)
+		apartment, err := s.GetApartmentByID(ctx, req.ApartmentID)
+		return getApartmentByIDResponse{
 			Apartment: apartment,
 			Err:       err,
 		}, nil

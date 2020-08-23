@@ -3,6 +3,7 @@ package apartments
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/go-kit/kit/circuitbreaker"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport"
@@ -18,9 +19,9 @@ import (
 )
 
 const queueName = "apartments"
-const getApartmentByIdSubject = "apartments.getApartmentById"
+const getApartmentByIDSubject = "apartments.getApartmentById"
 
-func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
+func MakeHTTPHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
 		kithttp.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		kithttp.ServerErrorEncoder(encodeError),
@@ -66,25 +67,25 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 }
 
 func MakeNatsHandler(s Service, nc *nats.Conn, tracer *zipkin.Tracer) {
-	apartmentByIdEndpoint := makeGetApartmentByIdEndpoint(s)
+	apartmentByIDEndpoint := makeGetApartmentByIDEndpoint(s)
 	subscriber := kitnats.NewSubscriber(
-		apartmentByIdEndpoint,
-		decodeGetApartmentByIdRequest,
+		apartmentByIDEndpoint,
+		decodeGetApartmentByIDRequest,
 		kitnats.EncodeJSONResponse,
 		natszipkin.NATSSubscriberTrace(tracer, natszipkin.Name("get apartments by id")),
 	)
-	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
+	_, err := nc.QueueSubscribe(getApartmentByIDSubject, queueName, subscriber.ServeMsg(nc))
 	if err != nil {
 		panic(err)
 	}
 }
 
-func decodeGetApartmentByIdRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
-	var getApartmentByIdRequest getApartmentByIdRequest
-	err = json.Unmarshal(msg.Data, &getApartmentByIdRequest)
+func decodeGetApartmentByIDRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
+	var getApartmentByIDRequest getApartmentByIDRequest
+	err = json.Unmarshal(msg.Data, &getApartmentByIDRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return getApartmentByIdRequest, nil
+	return getApartmentByIDRequest, nil
 }
