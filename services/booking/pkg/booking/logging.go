@@ -2,8 +2,9 @@ package booking
 
 import (
 	"context"
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type loggingService struct {
@@ -15,7 +16,7 @@ func NewLoggingService(logger *zap.Logger, service Service) Service {
 	return &loggingService{logger: logger, Service: service}
 }
 
-func (s *loggingService) GetReservations(ctx context.Context, apartmentId string, start, end time.Time) (out []Reservation, err error) {
+func (s *loggingService) GetReservations(ctx context.Context, apartmentID string, start, end time.Time) (out []Reservation, err error) {
 	defer func(begin time.Time) {
 		s.logger.Debug("calling GetReservations",
 			zap.Duration("took", time.Since(begin)),
@@ -23,10 +24,10 @@ func (s *loggingService) GetReservations(ctx context.Context, apartmentId string
 			zap.Error(err),
 		)
 	}(time.Now())
-	return s.Service.GetReservations(ctx, apartmentId, start, end)
+	return s.Service.GetReservations(ctx, apartmentID, start, end)
 }
 
-func (s *loggingService) BookApartment(ctx context.Context, userId, apartmentId string, start, end time.Time) (out *Reservation, err error) {
+func (s *loggingService) BookApartment(ctx context.Context, userID, apartmentID string, start, end time.Time) (out *Reservation, err error) { //nolint:lll
 	defer func(begin time.Time) {
 		s.logger.Debug("calling BookApartment",
 			zap.Duration("took", time.Since(begin)),
@@ -34,5 +35,5 @@ func (s *loggingService) BookApartment(ctx context.Context, userId, apartmentId 
 			zap.Error(err),
 		)
 	}(time.Now())
-	return s.Service.BookApartment(ctx, userId, apartmentId, start, end)
+	return s.Service.BookApartment(ctx, userID, apartmentID, start, end)
 }

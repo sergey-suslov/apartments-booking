@@ -1,55 +1,62 @@
 package booking
 
 import (
-	nats_tracing "booking/pkg/nats-tracing"
 	"context"
 	"encoding/json"
 	"errors"
+
 	natstransport "github.com/go-kit/kit/transport/nats"
 	"github.com/nats-io/nats.go"
 	"github.com/openzipkin/zipkin-go"
+	"github.com/sergey-suslov/go-kit-nats-zipkin-tracing/natszipkin"
 )
 
-const getApartmentByIdSubject = "apartments.getApartmentById"
+const getApartmentByIDSubject = "apartments.getApartmentById"
 
-var coldNotGetResponseFromApartment = errors.New("could not get response from the apartment service, wrong response format")
+var ErrColdNotGetResponseFromApartment = errors.New("could not get response from the apartment service, wrong response format")
 
-type apartmentsRepository struct {
+type ApartmentsRepositoryNATS struct {
 	nc     *nats.Conn
 	tracer *zipkin.Tracer
 }
 
-func NewApartmentsRepository(nc *nats.Conn, tracer *zipkin.Tracer) *apartmentsRepository {
-	return &apartmentsRepository{nc: nc, tracer: tracer}
+func NewApartmentsRepository(nc *nats.Conn, tracer *zipkin.Tracer) *ApartmentsRepositoryNATS {
+	return &ApartmentsRepositoryNATS{nc: nc, tracer: tracer}
 }
 
-type getApartmentByIdRequest struct {
-	ApartmentId string `json:"apartmentId"`
+type getApartmentByIDRequest struct {
+	ApartmentID string `json:"apartmentId"`
 }
 
-type getApartmentByIdResponse struct {
+type getApartmentByIDResponse struct {
 	Apartment Apartment `json:"apartment"`
 	Err       error     `json:"err,omitempty"`
 }
 
-func (a *apartmentsRepository) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
-	publisher := natstransport.NewPublisher(a.nc, getApartmentByIdSubject, natstransport.EncodeJSONRequest, decodeGetApartmentById, nats_tracing.NATSPublisherTrace(a.tracer, nats_tracing.SetName("book an apartment")))
-	res, err := publisher.Endpoint()(ctx, getApartmentByIdRequest{ApartmentId: apartmentId})
+func (a *ApartmentsRepositoryNATS) GetApartmentByID(ctx context.Context, apartmentID string) (*Apartment, error) {
+	publisher := natstransport.NewPublisher(
+		a.nc,
+		getApartmentByIDSubject,
+		natstransport.EncodeJSONRequest,
+		decodeGetApartmentByID,
+		natszipkin.NATSPublisherTrace(a.tracer, natszipkin.Name("book an apartment")),
+	)
+	res, err := publisher.Endpoint()(ctx, getApartmentByIDRequest{ApartmentID: apartmentID})
 	if err != nil {
 		return nil, err
 	}
-	getApartmentByIdResponse, ok := res.(getApartmentByIdResponse)
+	response, ok := res.(getApartmentByIDResponse)
 	if !ok {
-		return nil, coldNotGetResponseFromApartment
+		return nil, ErrColdNotGetResponseFromApartment
 	}
-	if getApartmentByIdResponse.Apartment.ID == "" {
-		return nil, NoApartmentWithGivenId
+	if response.Apartment.ID == "" {
+		return nil, ErrNoApartmentWithGivenID
 	}
-	return &getApartmentByIdResponse.Apartment, nil
+	return &response.Apartment, nil
 }
 
-func decodeGetApartmentById(_ context.Context, msg *nats.Msg) (response interface{}, err error) {
-	var res getApartmentByIdResponse
+func decodeGetApartmentByID(_ context.Context, msg *nats.Msg) (response interface{}, err error) {
+	var res getApartmentByIDResponse
 	err = json.Unmarshal(msg.Data, &res)
 	if err != nil {
 		return nil, err
