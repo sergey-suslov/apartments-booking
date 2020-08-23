@@ -2,9 +2,10 @@ package booking
 
 import (
 	"errors"
-	"github.com/dgrijalva/jwt-go"
 	"net/http"
 	"strings"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 const SECRET = "xxx"

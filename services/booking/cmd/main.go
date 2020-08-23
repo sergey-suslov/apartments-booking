@@ -5,6 +5,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"text/tabwriter"
+	"time"
+
 	kitlog "github.com/go-kit/kit/log"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	"github.com/nats-io/nats.go"
@@ -15,13 +22,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"text/tabwriter"
-	"time"
 )
+
+const ErrorsChanBuffer = 2
 
 func main() {
 	fs := flag.NewFlagSet("bookingcli", flag.ExitOnError)
@@ -29,10 +32,11 @@ func main() {
 		port                 = fs.String("port", "50052", "Port of Booking service")
 		natsConnectionString = fs.String("nats", "localhost:4222", "NATS connection string, localhost:4222 for ex.")
 		mongoURI             = fs.String("mongo", "mongodb://user:password@localhost:27018/booking", "MongoDB connection string mongodb://...")
-		zipkinURL            = fs.String("zipkin-url", "", "Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
-		help                 = fs.Bool("h", false, "Show help")
-		test                 = fs.Bool("test", false, "Run test setup")
-		logDebug             = fs.Bool("debug", false, "Log debug info")
+		zipkinURL            = fs.String("zipkin-url",
+			"http://localhost:9411/api/v2/spans",
+			"Enable Zipkin tracing via HTTP reporter URL e.g. http://localhost:9411/api/v2/spans")
+		help     = fs.Bool("h", false, "Show help")
+		logDebug = fs.Bool("debug", false, "Log debug info")
 	)
 	fs.Usage = usageFor(fs, os.Args[0]+" [flags] <a> <b>")
 	_ = fs.Parse(os.Args[1:])
@@ -44,10 +48,6 @@ func main() {
 	mc, closeConn := connectMongo(*mongoURI)
 	nc, closeNats := connectNats(*natsConnectionString)
 
-	if *test {
-		// do some test thing
-	}
-
 	logConfig := zap.NewProductionConfig()
 	if *logDebug {
 		logConfig.Level.SetLevel(zap.DebugLevel)
@@ -58,30 +58,25 @@ func main() {
 	}
 
 	var zipkinTracer *zipkin.Tracer
-	{
-		if *zipkinURL != "" {
-			var (
-				err         error
-				hostPort    = "localhost:" + *port
-				serviceName = "booking"
-				reporter    = httpreporter.NewReporter(*zipkinURL)
-			)
-			zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
-			zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
-			if err != nil {
-				logger.Error("err", zap.Error(err))
-				os.Exit(1)
-			}
+	if *zipkinURL != "" {
+		var (
+			err         error
+			hostPort    = "localhost:" + *port
+			serviceName = "booking"
+			reporter    = httpreporter.NewReporter(*zipkinURL)
+		)
+		zEP, _ := zipkin.NewEndpoint(serviceName, hostPort)
+		zipkinTracer, err = zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(zEP))
+		if err != nil {
+			logger.Error("err", zap.Error(err))
+			os.Exit(1)
 		}
 	}
 
 	repository := booking.NewRepository(mc.Database("booking"))
-	apartmentsRepository := booking.NewApartmentsRepository(nc)
+	apartmentsRepository := booking.NewApartmentsRepository(nc, zipkinTracer)
 
 	service := booking.NewService(repository, apartmentsRepository, logger)
-	if *zipkinURL != "" {
-		service = booking.NewTracingService(zipkinTracer, service)
-	}
 	service = booking.NewLoggingService(logger, service)
 
 	fieldKeys := []string{"method"}
@@ -108,19 +103,19 @@ func main() {
 	mux := http.NewServeMux()
 
 	httpLogger := kitlog.With(kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr)), "component", "http")
-	mux.Handle("/reservations", booking.MakeHttpHandler(service, httpLogger))
+	mux.Handle("/reservations", booking.MakeHTTPHandler(service, httpLogger))
 
 	http.Handle("/", accessControl(mux))
 	http.Handle("/metrics", promhttp.Handler())
 
-	errs := make(chan error, 2)
+	errs := make(chan error, ErrorsChanBuffer)
 	go func() {
 		logger.Info("listening", zap.String("port", *port))
 		errs <- http.ListenAndServe(":"+*port, nil)
 	}()
 	go func() {
 		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGINT)
+		signal.Notify(c, syscall.SIGINT) //nolint:staticcheck
 		errs <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -156,7 +151,7 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 	}
 }
 
-func connectMongo(uri string) (*mongo.Client, func()) {
+func connectMongo(uri string) (mc *mongo.Client, disconnect func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
@@ -171,7 +166,7 @@ func connectMongo(uri string) (*mongo.Client, func()) {
 	}
 }
 
-func connectNats(connString string) (*nats.Conn, func()) {
+func connectNats(connString string) (nc *nats.Conn, closeConnection func()) {
 	nc, err := nats.Connect(connString)
 	if err != nil {
 		panic(err)

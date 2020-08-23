@@ -3,6 +3,7 @@ package booking
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/go-kit/kit/circuitbreaker"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport"
@@ -13,7 +14,7 @@ import (
 	"net/http"
 )
 
-func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
+func MakeHTTPHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
 		kithttp.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		kithttp.ServerErrorEncoder(encodeError),
@@ -25,7 +26,12 @@ func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
 
 	bookApartmentEndpoint := makeBookApartmentEndpoint(s)
 	bookApartmentEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(bookApartmentEndpoint)
-	bookApartmentHandler := kithttp.NewServer(bookApartmentEndpoint, DefaultRequestDecoder(decodeBookApartmentRequest), encodeResponse, opts...)
+	bookApartmentHandler := kithttp.NewServer(
+		bookApartmentEndpoint,
+		DefaultRequestDecoder(decodeBookApartmentRequest),
+		encodeResponse,
+		opts...,
+	)
 
 	r := mux.NewRouter()
 
@@ -63,7 +69,7 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch err {
-	case wrongIdFormat:
+	case ErrWrongIDFormat:
 		w.WriteHeader(http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
@@ -74,10 +80,10 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 }
 
 type UserClaimable interface {
-	SetUserClaim(claim UserClaim)
+	SetUserClaim(claim *UserClaim)
 }
 
-func DefaultRequestDecoder(decoder func(r *http.Request) (UserClaimable, error)) func(_ context.Context, r *http.Request) (interface{}, error) {
+func DefaultRequestDecoder(decoder func(r *http.Request) (UserClaimable, error)) func(_ context.Context, r *http.Request) (interface{}, error) { //nolint:lll
 	return func(_ context.Context, r *http.Request) (interface{}, error) {
 		userClaim, err := GetUserClaimFromRequest(r)
 		if err != nil {
@@ -88,7 +94,7 @@ func DefaultRequestDecoder(decoder func(r *http.Request) (UserClaimable, error))
 		if err != nil {
 			return nil, err
 		}
-		request.SetUserClaim(*userClaim)
+		request.SetUserClaim(userClaim)
 		return request, nil
 	}
 }

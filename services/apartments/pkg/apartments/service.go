@@ -3,10 +3,11 @@ package apartments
 import (
 	"context"
 	"errors"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-var DatabaseError = errors.New("error requesting data from db")
+var ErrDatabase = errors.New("error requesting data from db")
 
 type City string
 
@@ -20,12 +21,12 @@ type Apartment struct {
 
 type Service interface {
 	GetApartments(ctx context.Context, city City, limit, offset int) ([]Apartment, error)
-	GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error)
+	GetApartmentByID(ctx context.Context, apartmentID string) (*Apartment, error)
 }
 
 type Repository interface {
 	GetApartmentsByCity(ctx context.Context, city City, limit, offset int) ([]Apartment, error)
-	GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error)
+	GetApartmentByID(ctx context.Context, apartmentID string) (*Apartment, error)
 }
 
 type service struct {
@@ -40,6 +41,6 @@ func (s *service) GetApartments(ctx context.Context, city City, limit, offset in
 	return s.ar.GetApartmentsByCity(ctx, city, limit, offset)
 }
 
-func (s *service) GetApartmentById(ctx context.Context, apartmentId string) (*Apartment, error) {
-	return s.ar.GetApartmentById(ctx, apartmentId)
+func (s *service) GetApartmentByID(ctx context.Context, apartmentID string) (*Apartment, error) {
+	return s.ar.GetApartmentByID(ctx, apartmentID)
 }

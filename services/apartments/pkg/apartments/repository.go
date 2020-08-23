@@ -2,53 +2,44 @@ package apartments
 
 import (
 	"context"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"strconv"
 )
 
 const apartmentCollectionName = "apartments"
 
 const maxApartmentLimit = 100
 
-type repository struct {
+type MongoRepositoryApartments struct {
 	db *mongo.Database
 }
 
-func NewRepository(db *mongo.Database) *repository {
-	return &repository{db: db}
+func NewRepository(db *mongo.Database) *MongoRepositoryApartments {
+	return &MongoRepositoryApartments{db: db}
 }
 
-func (r *repository) GetApartmentsByCity(ctx context.Context, city City, limit, offset int) ([]Apartment, error) {
+func (r *MongoRepositoryApartments) GetApartmentsByCity(ctx context.Context, city City, limit, offset int) ([]Apartment, error) {
 	if limit > maxApartmentLimit {
 		limit = maxApartmentLimit
 	}
 	opts := options.Find().SetLimit(int64(limit)).SetSkip(int64(offset))
 	cursor, err := r.db.Collection(apartmentCollectionName).Find(ctx, bson.D{{"city", city}}, opts)
 	if err != nil {
-		return nil, DatabaseError
+		return nil, ErrDatabase
 	}
 	apartments := make([]Apartment, 0, limit)
 	err = cursor.All(ctx, &apartments)
 	if err != nil {
-		return nil, DatabaseError
+		return nil, ErrDatabase
 	}
 	return apartments, nil
 }
 
-func (r *repository) GetApartmentById(ctx context.Context, apartmentId string) (a *Apartment, err error) {
-	span, _ := StartSpanFromContext(ctx, "mongo call get apartment by id")
-	if span != nil {
-		span.Tag("db", "mongodb")
-		defer func() {
-			span.Tag("error", strconv.FormatBool(err != nil))
-			span.Finish()
-		}()
-	}
-
-	objectID, err := primitive.ObjectIDFromHex(apartmentId)
+func (r *MongoRepositoryApartments) GetApartmentByID(ctx context.Context, apartmentID string) (a *Apartment, err error) {
+	objectID, err := primitive.ObjectIDFromHex(apartmentID)
 	if err != nil {
 		return nil, err
 	}

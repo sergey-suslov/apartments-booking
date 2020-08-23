@@ -3,6 +3,7 @@ package apartments
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/go-kit/kit/circuitbreaker"
 	kitlog "github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport"
@@ -10,17 +11,17 @@ import (
 	kitnats "github.com/go-kit/kit/transport/nats"
 	"github.com/gorilla/mux"
 	"github.com/nats-io/nats.go"
+	"github.com/openzipkin/zipkin-go"
+	"github.com/sergey-suslov/go-kit-nats-zipkin-tracing/natszipkin"
 	"github.com/sony/gobreaker"
 
 	"net/http"
 )
 
 const queueName = "apartments"
-const getApartmentByIdSubject = "apartments.getApartmentById"
+const getApartmentByIDSubject = "apartments.getApartmentById"
 
-const SpanCtxKey = "SpanCtxKey"
-
-func MakeHttpHandler(s Service, logger kitlog.Logger) http.Handler {
+func MakeHTTPHandler(s Service, logger kitlog.Logger) http.Handler {
 	opts := []kithttp.ServerOption{
 		kithttp.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		kithttp.ServerErrorEncoder(encodeError),
@@ -65,45 +66,26 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	})
 }
 
-func MakeNatsHandler(s Service, nc *nats.Conn) {
-	apartmentByIdEndpoint := makeGetApartmentByIdEndpoint(s)
+func MakeNatsHandler(s Service, nc *nats.Conn, tracer *zipkin.Tracer) {
+	apartmentByIDEndpoint := makeGetApartmentByIDEndpoint(s)
 	subscriber := kitnats.NewSubscriber(
-		apartmentByIdEndpoint,
-		decodeGetApartmentByIdRequest,
+		apartmentByIDEndpoint,
+		decodeGetApartmentByIDRequest,
 		kitnats.EncodeJSONResponse,
-
-		// turn on zipkin context parsing
-		kitnats.SubscriberBefore(DecodeSpanContext),
+		natszipkin.NATSSubscriberTrace(tracer, natszipkin.Name("get apartments by id")),
 	)
-	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
+	_, err := nc.QueueSubscribe(getApartmentByIDSubject, queueName, subscriber.ServeMsg(nc))
 	if err != nil {
 		panic(err)
 	}
 }
 
-// DecodeSpanContext parse zipkin context from NATS message. Use as NewSubscriber option, for ex. nats.SubscriberBefore(DecodeSpanContext)
-func DecodeSpanContext(ctx context.Context, msg *nats.Msg) context.Context {
-	var payload natsPayload
-	err := json.Unmarshal(msg.Data, &payload)
-	if err != nil {
-		return ctx
-	}
-
-	marshaled, _ := json.Marshal(payload.Data)
-	msg.Data = marshaled
-
-	if !payload.SpanContext.TraceID.Empty() {
-		return context.WithValue(ctx, SpanCtxKey, payload.SpanContext)
-	}
-	return ctx
-}
-
-func decodeGetApartmentByIdRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
-	var getApartmentByIdRequest getApartmentByIdRequest
-	err = json.Unmarshal(msg.Data, &getApartmentByIdRequest)
+func decodeGetApartmentByIDRequest(_ context.Context, msg *nats.Msg) (request interface{}, err error) {
+	var getApartmentByIDRequest getApartmentByIDRequest
+	err = json.Unmarshal(msg.Data, &getApartmentByIDRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return getApartmentByIdRequest, nil
+	return getApartmentByIDRequest, nil
 }

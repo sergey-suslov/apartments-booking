@@ -2,8 +2,9 @@ package booking
 
 import (
 	"context"
-	"github.com/go-kit/kit/endpoint"
 	"time"
+
+	"github.com/go-kit/kit/endpoint"
 )
 
 type Errorer interface {
@@ -12,13 +13,13 @@ type Errorer interface {
 
 type getReservationsRequest struct {
 	UserClaim
-	ApartmentId string    `json:"apartmentId"`
+	ApartmentID string    `json:"apartmentId"`
 	Start       time.Time `json:"start"`
 	End         time.Time `json:"end"`
 }
 
-func (c *getReservationsRequest) SetUserClaim(claim UserClaim) {
-	c.UserClaim = claim
+func (c *getReservationsRequest) SetUserClaim(claim *UserClaim) {
+	c.UserClaim = *claim
 }
 
 type getReservationsResponse struct {
@@ -33,7 +34,7 @@ func (g getReservationsResponse) Error() error {
 func makeGetApartmentsEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(getReservationsRequest)
-		apartments, err := s.GetReservations(ctx, req.ApartmentId, req.Start, req.End)
+		apartments, err := s.GetReservations(ctx, req.ApartmentID, req.Start, req.End)
 		return getReservationsResponse{
 			Apartments: apartments,
 			Err:        err,
@@ -43,13 +44,13 @@ func makeGetApartmentsEndpoint(s Service) endpoint.Endpoint {
 
 type bookRequest struct {
 	UserClaim
-	ApartmentId string    `json:"apartmentId"`
+	ApartmentID string    `json:"apartmentId"`
 	Start       time.Time `json:"start"`
 	End         time.Time `json:"end"`
 }
 
-func (c *bookRequest) SetUserClaim(claim UserClaim) {
-	c.UserClaim = claim
+func (c *bookRequest) SetUserClaim(claim *UserClaim) {
+	c.UserClaim = *claim
 }
 
 type booksResponse struct {
@@ -64,7 +65,7 @@ func (g booksResponse) Error() error {
 func makeBookApartmentEndpoint(s Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(*bookRequest)
-		reservation, err := s.BookApartment(ctx, req.ID, req.ApartmentId, req.Start, req.End)
+		reservation, err := s.BookApartment(ctx, req.ID, req.ApartmentID, req.Start, req.End)
 		return booksResponse{Reservation: reservation, Err: err}, nil
 	}
 }

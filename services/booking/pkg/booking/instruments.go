@@ -2,34 +2,35 @@ package booking
 
 import (
 	"context"
-	"github.com/go-kit/kit/metrics"
 	"time"
+
+	"github.com/go-kit/kit/metrics"
 )
 
-type instrumentingService struct {
+type InstrumentingService struct {
 	requestCount   metrics.Counter
 	requestLatency metrics.Histogram
 	Service
 }
 
-func NewInstrumentingService(requestCount metrics.Counter, requestLatency metrics.Histogram, service Service) *instrumentingService {
-	return &instrumentingService{requestCount: requestCount, requestLatency: requestLatency, Service: service}
+func NewInstrumentingService(requestCount metrics.Counter, requestLatency metrics.Histogram, service Service) *InstrumentingService {
+	return &InstrumentingService{requestCount: requestCount, requestLatency: requestLatency, Service: service}
 }
 
-func (i *instrumentingService) GetReservations(ctx context.Context, apartmentId string, start, end time.Time) (out []Reservation, err error) {
+func (i *InstrumentingService) GetReservations(ctx context.Context, apartmentID string, start, end time.Time) (out []Reservation, err error) { //nolint:lll
 	defer func(begin time.Time) {
 		i.requestCount.With("method", "GetReservations").Add(1)
 		i.requestLatency.With("method", "GetReservations").Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
-	return i.Service.GetReservations(ctx, apartmentId, start, end)
+	return i.Service.GetReservations(ctx, apartmentID, start, end)
 }
 
-func (i *instrumentingService) BookApartment(ctx context.Context, userId, apartmentId string, start, end time.Time) (out *Reservation, err error) {
+func (i *InstrumentingService) BookApartment(ctx context.Context, userID, apartmentID string, start, end time.Time) (out *Reservation, err error) { //nolint:lll
 	defer func(begin time.Time) {
 		i.requestCount.With("method", "BookApartment").Add(1)
 		i.requestLatency.With("method", "BookApartment").Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
-	return i.Service.BookApartment(ctx, userId, apartmentId, start, end)
+	return i.Service.BookApartment(ctx, userID, apartmentID, start, end)
 }
