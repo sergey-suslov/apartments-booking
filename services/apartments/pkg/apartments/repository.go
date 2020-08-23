@@ -6,7 +6,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"strconv"
 )
 
 const apartmentCollectionName = "apartments"
@@ -39,15 +38,6 @@ func (r *repository) GetApartmentsByCity(ctx context.Context, city City, limit, 
 }
 
 func (r *repository) GetApartmentById(ctx context.Context, apartmentId string) (a *Apartment, err error) {
-	span, _ := StartSpanFromContext(ctx, "mongo call get apartment by id")
-	if span != nil {
-		span.Tag("db", "mongodb")
-		defer func() {
-			span.Tag("error", strconv.FormatBool(err != nil))
-			span.Finish()
-		}()
-	}
-
 	objectID, err := primitive.ObjectIDFromHex(apartmentId)
 	if err != nil {
 		return nil, err

@@ -1,7 +1,6 @@
 package apartments
 
 import (
-	nats_tracing "apartments/pkg/nats-tracing"
 	"context"
 	"encoding/json"
 	"github.com/go-kit/kit/circuitbreaker"
@@ -12,6 +11,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nats-io/nats.go"
 	"github.com/openzipkin/zipkin-go"
+	"github.com/sergey-suslov/go-kit-nats-zipkin-tracing/natszipkin"
 	"github.com/sony/gobreaker"
 
 	"net/http"
@@ -71,9 +71,7 @@ func MakeNatsHandler(s Service, nc *nats.Conn, tracer *zipkin.Tracer) {
 		apartmentByIdEndpoint,
 		decodeGetApartmentByIdRequest,
 		kitnats.EncodeJSONResponse,
-
-		// turn on zipkin context parsing
-		nats_tracing.NATSSubscriberTrace(tracer, nats_tracing.SetName("get apartments by id")),
+		natszipkin.NATSSubscriberTrace(tracer, natszipkin.Name("get apartments by id")),
 	)
 	_, err := nc.QueueSubscribe(getApartmentByIdSubject, queueName, subscriber.ServeMsg(nc))
 	if err != nil {
