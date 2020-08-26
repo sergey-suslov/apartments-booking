@@ -1,0 +1,6 @@
+nats:
+  externalAccess: true
+auth:
+  enabled: false
+
+nameOverride: nats

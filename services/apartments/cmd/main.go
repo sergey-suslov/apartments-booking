@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -159,6 +160,7 @@ func usageFor(fs *flag.FlagSet, short string) func() {
 }
 
 func connectMongo(uri string) (client *mongo.Client, disconnect func()) {
+	log.Println(uri)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
@@ -187,6 +189,7 @@ func createTestApartments(mc *mongo.Database) {
 }
 
 func connectNats(connString string) (nc *nats.Conn, closeNats func()) {
+	log.Println(connString)
 	nc, err := nats.Connect(connString)
 	if err != nil {
 		panic(err)
